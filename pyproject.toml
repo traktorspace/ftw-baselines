@@ -68,6 +68,14 @@ optional-dependencies.dev = [
   "ruff>=0.1,<1",
   "twine",
 ]
+optional-dependencies.kuva = [
+  "duckdb>=1,<2",
+  "lonboard>=0.10,<1",
+  "rasterix>=0.1",
+  "s3fs>=2025,<2026",
+  "xarray>=2024,<2026",
+  "zarr>=3,<4",
+]
 urls.Changelog = "https://github.com/fieldsoftheworld/ftw-baselines/blob/main/CHANGELOG.md"
 urls.Homepage = "https://fieldsofthe.world/"
 urls.Issues = "https://github.com/fieldsoftheworld/ftw-baselines/issues"
