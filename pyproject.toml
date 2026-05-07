@@ -75,6 +75,7 @@ optional-dependencies.kuva = [
   "s3fs>=2025,<2026",
   "xarray>=2024,<2026",
   "zarr>=3,<4",
+  "higra>=0.6.13",
 ]
 urls.Changelog = "https://github.com/fieldsoftheworld/ftw-baselines/blob/main/CHANGELOG.md"
 urls.Homepage = "https://fieldsofthe.world/"
