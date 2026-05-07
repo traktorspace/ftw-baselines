@@ -43,6 +43,7 @@ def create_plot_inference_results(
     title: str = "",
     figsize_per_col: int = FIGSIZE_PER_COL,
     ncols: int = NCOLS,
+    crop: tuple[int, int, int, int] | None = None,
 ) -> plt.Figure:
     """Display inference results, optionally alongside the source image.
 
@@ -57,6 +58,8 @@ def create_plot_inference_results(
         title: Title for the overall figure. Defaults to the source file stem if provided.
         figsize_per_col: Width and height in inches per subplot column.
         ncols: Number of columns in the prediction grid.
+        crop: Optional spatial subset as ``(row_start, row_end, col_start, col_end)``.
+            Applied to both the source and prediction TIFs. Defaults to the full image.
 
     Returns:
         The matplotlib Figure.
@@ -65,6 +68,16 @@ def create_plot_inference_results(
         AssertionError: If the source TIF does not have 6 or 8 bands.
     """
     prediction_tifs = [Path(p) for p in prediction_tifs]
+
+    window: rasterio.windows.Window | None = None
+    if crop is not None:
+        row_start, row_end, col_start, col_end = crop
+        window = rasterio.windows.Window(
+            col_off=col_start,
+            row_off=row_start,
+            width=col_end - col_start,
+            height=row_end - row_start,
+        )
 
     n_results = len(prediction_tifs)
     pred_rows = math.ceil(n_results / ncols) if n_results > 0 else 0
@@ -89,7 +102,7 @@ def create_plot_inference_results(
     if source_tif is not None:
         source_tif = Path(source_tif)
         with rasterio.open(source_tif) as src:
-            data = src.read()
+            data = src.read(window=window)
 
         n_bands = data.shape[0]
         assert n_bands in (6, 8), f"Expected 6 or 8 bands, got {n_bands}."
@@ -111,7 +124,7 @@ def create_plot_inference_results(
         col = i % ncols
 
         with rasterio.open(pred_path) as inf_src:
-            out_dat = inf_src.read()
+            out_dat = inf_src.read(window=window)
 
         if out_dat.shape[0] == 1:
             arr = out_dat.squeeze(0)
@@ -141,7 +154,9 @@ def create_plot_inference_results(
     return fig
 
 
-def plot_bitemporal(tif_path: str, norm: float = 3000.0) -> plt.Figure:
+def plot_bitemporal(
+    tif_path: str, norm: float = 3000.0, crop: tuple[int, int, int, int] | None = None
+) -> plt.Figure:
     """Plot a bitemporal RGB acquisition from a multi-band TIF.
 
     Expects either 6-band (RGB t0 + RGB t1) or 8-band (RGBN t0 + RGBN t1) input.
@@ -149,6 +164,8 @@ def plot_bitemporal(tif_path: str, norm: float = 3000.0) -> plt.Figure:
     Args:
         tif_path: Path to the source TIF file.
         norm: Normalization factor for reflectance values.
+        crop: Optional spatial subset as ``(row_start, row_end, col_start, col_end)``.
+            Example: ``(1000, 2000, 1000, 2000)``.  Defaults to the full image.
 
     Returns:
         The matplotlib Figure.
@@ -158,14 +175,32 @@ def plot_bitemporal(tif_path: str, norm: float = 3000.0) -> plt.Figure:
         n_bands = src.count
         assert n_bands in (6, 8), f"Expected 6 or 8 bands, got {n_bands}"
         stride = n_bands // 2  # 3 or 4
-        t0 = src.read((1, 2, 3)).transpose(1, 2, 0) / norm
-        t1 = src.read((stride + 1, stride + 2, stride + 3)).transpose(1, 2, 0) / norm
+        if crop is not None:
+            row_start, row_end, col_start, col_end = crop
+            window = rasterio.windows.Window(
+                col_off=col_start,
+                row_off=row_start,
+                width=col_end - col_start,
+                height=row_end - row_start,
+            )
+            t0 = src.read((1, 2, 3), window=window).transpose(1, 2, 0) / norm
+            t1 = (
+                src.read((stride + 1, stride + 2, stride + 3), window=window).transpose(
+                    1, 2, 0
+                )
+                / norm
+            )
+        else:
+            t0 = src.read((1, 2, 3)).transpose(1, 2, 0) / norm
+            t1 = (
+                src.read((stride + 1, stride + 2, stride + 3)).transpose(1, 2, 0) / norm
+            )
 
     t0 = np.clip(t0, 0, 1)
     t1 = np.clip(t1, 0, 1)
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    fig.suptitle(path.name.stem, fontsize=13, fontweight="bold")
+    fig.suptitle(path.stem, fontsize=13, fontweight="bold")
 
     for ax, img, title in zip(axes, [t0, t1], ["t0", "t1"]):
         ax.imshow(img)
