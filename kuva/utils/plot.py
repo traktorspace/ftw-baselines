@@ -72,9 +72,7 @@ def create_plot_inference_results(
     nrows = source_row + pred_rows
 
     fig, ax = plt.subplots(
-        nrows,
-        ncols,
-        figsize=(figsize_per_col * ncols, figsize_per_col * nrows),
+        nrows, ncols, figsize=(figsize_per_col * ncols, figsize_per_col * nrows)
     )
     ax = np.atleast_2d(ax)
 
@@ -137,6 +135,42 @@ def create_plot_inference_results(
     # Hide unused cells in the last prediction row
     for j in range(n_results % ncols or ncols, ncols):
         ax[-1, j].axis("off")
+
+    plt.tight_layout()
+    plt.close(fig)
+    return fig
+
+
+def plot_bitemporal(tif_path: str, norm: float = 3000.0) -> plt.Figure:
+    """Plot a bitemporal RGB acquisition from a multi-band TIF.
+
+    Expects either 6-band (RGB t0 + RGB t1) or 8-band (RGBN t0 + RGBN t1) input.
+
+    Args:
+        tif_path: Path to the source TIF file.
+        norm: Normalization factor for reflectance values.
+
+    Returns:
+        The matplotlib Figure.
+    """
+    path = Path(tif_path)
+    with rasterio.open(tif_path) as src:
+        n_bands = src.count
+        assert n_bands in (6, 8), f"Expected 6 or 8 bands, got {n_bands}"
+        stride = n_bands // 2  # 3 or 4
+        t0 = src.read((1, 2, 3)).transpose(1, 2, 0) / norm
+        t1 = src.read((stride + 1, stride + 2, stride + 3)).transpose(1, 2, 0) / norm
+
+    t0 = np.clip(t0, 0, 1)
+    t1 = np.clip(t1, 0, 1)
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    fig.suptitle(path.name.stem, fontsize=13, fontweight="bold")
+
+    for ax, img, title in zip(axes, [t0, t1], ["t0", "t1"]):
+        ax.imshow(img)
+        ax.set_title(title, fontsize=10)
+        ax.axis("off")
 
     plt.tight_layout()
     plt.close(fig)
