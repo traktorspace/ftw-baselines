@@ -84,10 +84,8 @@ def create_plot_inference_results(
     source_row = 1 if source_tif is not None else 0
     nrows = source_row + pred_rows
 
-    fig, ax = plt.subplots(
-        nrows, ncols, figsize=(figsize_per_col * ncols, figsize_per_col * nrows)
-    )
-    ax = np.atleast_2d(ax)
+    fig = plt.figure(figsize=(figsize_per_col * ncols, figsize_per_col * nrows))
+    gs_outer = fig.add_gridspec(nrows, 1, hspace=0.3)
 
     if title:
         fig_title = title
@@ -98,7 +96,7 @@ def create_plot_inference_results(
     if fig_title:
         fig.suptitle(fig_title, fontsize=14, fontweight="bold", y=1.01)
 
-    # --- Optional row 0: t0 and t1 RGB ---
+    # --- Optional row 0: t0 and t1 RGB — always 2 equal columns ---
     if source_tif is not None:
         source_tif = Path(source_tif)
         with rasterio.open(source_tif) as src:
@@ -108,20 +106,30 @@ def create_plot_inference_results(
         assert n_bands in (6, 8), f"Expected 6 or 8 bands, got {n_bands}."
         t1_start = 4 if n_bands == 8 else 3
 
+        src_gs = gs_outer[0].subgridspec(1, 2, wspace=0.05)
+        ax_t0 = fig.add_subplot(src_gs[0, 0])
+        ax_t1 = fig.add_subplot(src_gs[0, 1])
+
         t0_img = np.clip(data[0:3].transpose(1, 2, 0) / 3000, 0, 1)
-        ax[0, 0].imshow(t0_img)
-        ax[0, 0].set_title("t0", fontsize=10)
-        ax[0, 0].axis("off")
+        ax_t0.imshow(t0_img)
+        ax_t0.set_title("t0", fontsize=10)
+        ax_t0.axis("off")
 
         t1_img = np.clip(data[t1_start : t1_start + 3].transpose(1, 2, 0) / 3000, 0, 1)
-        ax[0, 1].imshow(t1_img)
-        ax[0, 1].set_title("t1", fontsize=10)
-        ax[0, 1].axis("off")
+        ax_t1.imshow(t1_img)
+        ax_t1.set_title("t1", fontsize=10)
+        ax_t1.axis("off")
 
-    # --- Prediction rows ---
+    # --- Prediction rows — ncols columns each ---
+    pred_axes: dict[tuple[int, int], plt.Axes] = {}
+    for r in range(pred_rows):
+        pred_gs = gs_outer[source_row + r].subgridspec(1, ncols, wspace=0.05)
+        for c in range(ncols):
+            pred_axes[(r, c)] = fig.add_subplot(pred_gs[0, c])
+
     for i, pred_path in enumerate(prediction_tifs):
-        row = source_row + i // ncols
-        col = i % ncols
+        r, c = i // ncols, i % ncols
+        ax = pred_axes[(r, c)]
 
         with rasterio.open(pred_path) as inf_src:
             out_dat = inf_src.read(window=window)
@@ -129,9 +137,9 @@ def create_plot_inference_results(
         if out_dat.shape[0] == 1:
             arr = out_dat.squeeze(0)
             rgb = _apply_class_colormap(arr)
-            ax[row, col].imshow(rgb, interpolation="nearest")
+            ax.imshow(rgb, interpolation="nearest")
             patches = _make_legend_patches(np.unique(arr))
-            ax[row, col].legend(
+            ax.legend(
                 handles=patches,
                 loc="lower right",
                 fontsize=7,
@@ -140,16 +148,16 @@ def create_plot_inference_results(
             )
         else:
             img = np.moveaxis(out_dat, 0, -1)
-            ax[row, col].imshow(np.clip(img, 0, 1))
+            ax.imshow(np.clip(img, 0, 1))
 
-        ax[row, col].set_title(pred_path.stem, fontsize=9)
-        ax[row, col].axis("off")
+        ax.set_title(pred_path.stem, fontsize=9)
+        ax.axis("off")
 
     # Hide unused cells in the last prediction row
-    for j in range(n_results % ncols or ncols, ncols):
-        ax[-1, j].axis("off")
+    last_row = pred_rows - 1
+    for c in range(n_results % ncols or ncols, ncols):
+        pred_axes[(last_row, c)].axis("off")
 
-    plt.tight_layout()
     plt.close(fig)
     return fig
 
