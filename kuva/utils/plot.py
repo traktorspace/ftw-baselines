@@ -8,8 +8,8 @@ import rasterio
 
 CLASS_COLORS = {
     0: ("#2d6a4f", "background"),
-    1: ("#f4a261", "field boundary"),
-    2: ("#e76f51", "field interior"),
+    1: ("#f4a261", "field interior"),
+    2: ("#e76f51", "field boundary"),
 }
 
 FIGSIZE_PER_COL = 5
@@ -160,6 +160,146 @@ def create_plot_inference_results(
 
     plt.close(fig)
     return fig
+
+
+def plot_class_distribution(
+    prediction_tifs: list[str | Path],
+    crop: tuple[int, int, int, int] | None = None,
+    figsize: tuple[float, float] | None = None,
+    ncols: int = NCOLS,
+    show_sorted: bool = False,
+) -> "tuple[plt.Figure, dict] | tuple[plt.Figure, plt.Figure, dict]":
+    """Plot class pixel fractions for a list of prediction TIFs.
+
+    Always renders a per-file grid (one subplot per file, bars per class).
+    When ``show_sorted=True``, also renders a second figure with one subplot per
+    class, files sorted from highest to lowest fraction.
+
+    Args:
+        prediction_tifs: List of paths to single-band label prediction .tif files.
+        crop: Optional spatial subset as ``(row_start, row_end, col_start, col_end)``.
+        figsize: Figure size ``(width, height)`` in inches for the per-file grid.
+            Auto-sized if *None*.
+        ncols: Number of subplot columns in the per-file grid.
+        show_sorted: If *True*, also build the sorted figure.
+
+    Returns:
+        ``(fig_grid, fractions)`` when ``show_sorted=False``, or
+        ``(fig_grid, fig_sorted, fractions)`` when ``show_sorted=True``.
+        ``fractions`` is a ``dict[str, dict[int, float]]`` mapping each file stem
+        to a ``{class_id: fraction}`` dict.
+    """
+    prediction_tifs = [Path(p) for p in prediction_tifs]
+    n = len(prediction_tifs)
+
+    window: rasterio.windows.Window | None = None
+    if crop is not None:
+        row_start, row_end, col_start, col_end = crop
+        window = rasterio.windows.Window(
+            col_off=col_start,
+            row_off=row_start,
+            width=col_end - col_start,
+            height=row_end - row_start,
+        )
+
+    classes = sorted(CLASS_COLORS.keys())
+    n_classes = len(classes)
+
+    # --- collect fractions for every file once ---
+    all_fractions: dict[int, list[tuple[str, float]]] = {c: [] for c in classes}
+    for pred_path in prediction_tifs:
+        with rasterio.open(pred_path) as src:
+            arr = src.read(1, window=window)
+        total = arr.size
+        for c in classes:
+            all_fractions[c].append((pred_path.stem, np.sum(arr == c) / total))
+
+    bar_colors = [CLASS_COLORS[c][0] for c in classes]
+    bar_labels = [CLASS_COLORS[c][1] for c in classes]
+
+    # --- per-file grid figure ---
+    nrows = math.ceil(n / ncols)
+    grid_figsize = figsize
+    if grid_figsize is None:
+        w = 2.5 * min(n, ncols)
+        h = 4 * nrows
+        grid_figsize = (max(w, 6), max(h, 4))
+
+    fig_grid, axes = plt.subplots(
+        nrows, ncols, figsize=grid_figsize, squeeze=False, constrained_layout=True
+    )
+
+    for i, pred_path in enumerate(prediction_tifs):
+        ax = axes[i // ncols][i % ncols]
+        fractions = [all_fractions[cls][i][1] for cls in classes]
+
+        bars = ax.bar(
+            bar_labels, fractions, color=bar_colors, edgecolor="white", width=0.5
+        )
+        for bar, frac in zip(bars, fractions):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                frac + 0.01,
+                f"{frac:.1%}",
+                ha="center",
+                va="bottom",
+                fontsize=7,
+            )
+        ax.set_ylim(0, 1)
+        ax.set_ylabel("fraction", fontsize=8)
+        ax.set_title(pred_path.stem, fontsize=8)
+        ax.tick_params(axis="x", labelsize=8, rotation=15)
+
+    for j in range(n, nrows * ncols):
+        axes[j // ncols][j % ncols].axis("off")
+
+    plt.close(fig_grid)
+
+    # Build fractions dict: {stem: {class_id: fraction}}
+    fractions_out: dict[str, dict[int, float]] = {
+        pred_path.stem: {cls: all_fractions[cls][i][1] for cls in classes}
+        for i, pred_path in enumerate(prediction_tifs)
+    }
+
+    if not show_sorted:
+        return fig_grid, fractions_out
+
+    # --- sorted figure ---
+    max_stem_len = max((len(p.stem) for p in prediction_tifs), default=10)
+    label_inches = max_stem_len * 0.07
+    row_h = 4 + label_inches
+    sorted_figsize = (max(n * 0.8, 8), row_h * n_classes)
+
+    fig_sorted, sorted_axes = plt.subplots(n_classes, 1, figsize=sorted_figsize)
+    if n_classes == 1:
+        sorted_axes = [sorted_axes]
+
+    for ax, cls in zip(sorted_axes, classes):
+        color, label = CLASS_COLORS[cls]
+        sorted_pairs = sorted(all_fractions[cls], key=lambda x: x[1], reverse=True)
+        stems, vals = zip(*sorted_pairs)
+        display_stems = [st[-40:] if len(st) > 40 else st for st in stems]
+
+        bars = ax.bar(display_stems, vals, color=color, edgecolor="white", width=0.6)
+        for bar, val in zip(bars, vals):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                val + 0.005,
+                f"{val:.1%}",
+                ha="center",
+                va="bottom",
+                fontsize=7,
+            )
+        ax.set_ylim(0, 1)
+        ax.set_ylabel("fraction", fontsize=8)
+        ax.set_title(f"{label} (class {cls}) — sorted", fontsize=10)
+        ax.set_xticks(range(len(display_stems)))
+        ax.set_xticklabels(display_stems, ha="right", rotation=40, fontsize=7)
+
+    fig_sorted.tight_layout(h_pad=3.0)
+    plt.close(fig_sorted)
+
+    return fig_grid, fig_sorted, fractions_out
 
 
 def plot_bitemporal(
