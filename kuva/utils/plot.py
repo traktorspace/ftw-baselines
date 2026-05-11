@@ -221,9 +221,9 @@ def plot_class_distribution(
     nrows = math.ceil(n / ncols)
     grid_figsize = figsize
     if grid_figsize is None:
-        w = 2.5 * min(n, ncols)
+        w = 4.0 * min(n, ncols)
         h = 4 * nrows
-        grid_figsize = (max(w, 6), max(h, 4))
+        grid_figsize = (max(w, 8), max(h, 4))
 
     fig_grid, axes = plt.subplots(
         nrows, ncols, figsize=grid_figsize, squeeze=False, constrained_layout=True
