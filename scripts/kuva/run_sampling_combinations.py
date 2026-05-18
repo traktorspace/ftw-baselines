@@ -13,6 +13,7 @@ Usage:
 """
 
 import argparse
+import gc
 import os
 import time
 from pathlib import Path
@@ -144,6 +145,8 @@ def main():
         peak_vram_mb = None
         if torch.cuda.is_available() and args.gpu >= 0:
             peak_vram_mb = torch.cuda.max_memory_allocated(args.gpu) / 1024**2
+            gc.collect()
+            torch.cuda.empty_cache()
 
         stats.append(
             {
