@@ -21,7 +21,7 @@ uv pip install ".[kuva]"
 Runs the same inference pipeline with multiple model checkpoints on a single input GeoTIFF. Useful for comparing models on the same area without repeating boilerplate.
 
 ```bash
-python scripts/kuva/batch_inference.py /path/to/input.tif \
+uv run scripts/kuva/batch_inference.py /path/to/input.tif \
     --models model1.ckpt model2.ckpt \
     --out_dir ./output \
     --resize_factor 1 \
@@ -36,13 +36,13 @@ Downloads an 8-band planting+harvest composite (RGBNIR × 2 windows) from the [F
 
 ```bash
 # From bbox
-python scripts/kuva/download_ftw_cube.py \
+uv run scripts/kuva/download_ftw_cube.py \
     --bbox "-65.98,-35.14,-62.09,-29.11" \
     --year 2024 \
     --output ./cube.tif
 
 # From GeoJSON
-python scripts/kuva/download_ftw_cube.py \
+uv run scripts/kuva/download_ftw_cube.py \
     --geojson parcels.geojson \
     --year 2024 \
     --output ./cube.tif
@@ -55,7 +55,7 @@ python scripts/kuva/download_ftw_cube.py \
 Fetches FTW field predictions for a given AOI from the remote S3 Parquet store and exports them as GeoParquet files (one per year). Accepts a bounding box or a GeoJSON; when a GeoJSON is provided the results are spatially joined against its geometries.
 
 ```bash
-python scripts/kuva/fetch_ftw_fields.py \
+uv run scripts/kuva/fetch_ftw_fields.py \
     --geojson parcels.geojson \
     --output-dir ./output \
     --name my_fields
@@ -68,7 +68,7 @@ python scripts/kuva/fetch_ftw_fields.py \
 Finds the best Sentinel-2 planting/harvest scene pair for a given AOI and year by querying the Microsoft Planetary Computer STAC catalog. Can optionally download and merge the scenes into an 8-band input GeoTIFF ready for inference.
 
 ```bash
-python scripts/kuva/fetch_s2_scenes.py \
+uv run scripts/kuva/fetch_s2_scenes.py \
     --geojson parcels.geojson \
     --year 2024 \
     --create-input \
@@ -97,10 +97,12 @@ uv run scripts/kuva/rgb_inference_baseline.py input.tif \
 Sweeps over a predefined grid of `patch_size`, `resize_factor`, and `padding` values and runs inference for each combination on a single input image. Output filenames encode the parameters used (e.g. `ps256_rf2_pad16`). Handy for tuning sampling hyperparameters without writing custom loops.
 
 ```bash
-python scripts/kuva/run_sampling_combinations.py input.tif \
-    --model model.ckpt \
-    --out_dir ./output \
-    --gpu 0
+uv run scripts/kuva/run_sampling_combinations.py /path/to/input.tif \
+        --model /path/to/model.ckpt \
+        --out_dir /path/to/output_dir \
+        --gpu N \
+        --batch_size N \
+        --num_workers N
 ```
 
 ---
