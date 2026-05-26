@@ -3,6 +3,17 @@
 This folder contains scripts added on top of the [ftw-baselines](README.md) repo. Most commands are thin wrappers around `ftw-tools` refer to the main README for polygonization and general inference options.
 
 All scripts live under `scripts/kuva/`.
+- [Setup](#setup)
+- [Scripts](#scripts)
+  - [`batch_inference.py`](#batch_inferencepy)
+  - [`download_ftw_cube.py`](#download_ftw_cubepy)
+  - [`fetch_ftw_fields.py`](#fetch_ftw_fieldspy)
+  - [`fetch_s2_scenes.py`](#fetch_s2_scenespy)
+  - [`rgb_inference_baseline.py`](#rgb_inference_baselinepy)
+  - [`run_sampling_combinations.py`](#run_sampling_combinationspy)
+- [Notebooks](#notebooks)
+  - [`visualize_baseline.ipynb`](#visualize_baselineipynb)
+- [Polygonization](#polygonization)
 
 ## Setup
 
@@ -192,6 +203,19 @@ uv run scripts/kuva/run_sampling_combinations.py /path/to/input.tif \
         --num_workers N
 ```
 
+---
+
+## Notebooks
+
+Interactive notebooks for exploration and visualization live under `notebooks/kuva/`.
+
+### `visualize_baseline.ipynb`
+
+Runs the watershed baseline segmentation on a GeoTIFF and visualizes the results. The notebook covers:
+
+1. Loading a GeoTIFF and running `WatershedBaselineSegmentation` on it.
+2. Displaying the input RGB composite (with per-band percentile stretch), the gradient map, the watershed segments, and the segment boundaries overlaid on the image.
+3. Exporting the result as a uint8 label raster (0 = background, 1 = field interior, 2 = field boundary). 
 ---
 
 ## Polygonization
