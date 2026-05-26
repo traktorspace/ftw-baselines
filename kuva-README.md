@@ -32,33 +32,120 @@ uv run scripts/kuva/batch_inference.py /path/to/input.tif \
 
 ### `download_ftw_cube.py`
 
-Downloads an 8-band planting+harvest composite (RGBNIR × 2 windows) from the [FTW global Zarr](https://source.coop/ftw/global-data) feature store. The AOI can be specified as a bounding box or derived from a GeoJSON file.
+Downloads an 8-band planting+harvest composite (RGBNIR × 2 windows) from the [FTW global Zarr](https://source.coop/ftw/global-data) feature store.
+
+Run with no flags for a fully interactive wizard, or pass any/all flags to skip the corresponding prompts:
+
+| Flag | Interactive fallback |
+|------|---------------------|
+| `--geojson <file>` / `--bbox "x0,y0,x1,y1"` | Asked first: choose source type, then path or coords |
+| *(GeoJSON with >1 feature)* | Geometry picker: single index / `all-combined` / `all-individual` |
+| `--year 2024\|2025` | Prompted — only 2024 and 2025 are available |
+| `--output <file>` / `--output <folder>` (all-individual) | Suggested default from input stem + year |
+| `--threads N` | Prompted — default is `os.cpu_count()` |
 
 ```bash
-# From bbox
-uv run scripts/kuva/download_ftw_cube.py \
-    --bbox "-65.98,-35.14,-62.09,-29.11" \
-    --year 2024 \
-    --output ./cube.tif
+# Fully interactive
+uv run scripts/kuva/download_ftw_cube.py
 
-# From GeoJSON
+# Pre-fill some flags; rest are prompted
+uv run scripts/kuva/download_ftw_cube.py --geojson parcels.geojson --year 2025
+
+# Fully non-interactive
 uv run scripts/kuva/download_ftw_cube.py \
-    --geojson parcels.geojson \
-    --year 2024 \
-    --output ./cube.tif
+    --geojson parcels.geojson --year 2025 --output ./cube.tif --threads 8
+```
+
+```mermaid
+flowchart TD
+    A([start]) --> B{--geojson\nor --bbox\ngiven?}
+    B -- no --> C[prompt: geojson or bbox?]
+    C -- geojson --> D[prompt: file path]
+    C -- bbox --> E[prompt: xmin,ymin,xmax,ymax]
+    B -- yes --> F{GeoJSON?}
+    D --> F
+    E --> G[use bbox directly]
+    F -- yes --> H[read & reproject GeoJSON]
+    H --> I{n features > 1?}
+    I -- yes --> J[prompt: single idx /\nall-combined /\nall-individual]
+    I -- no --> K[use single geometry]
+    J --> K
+    G --> L{--year given?}
+    K --> L
+    L -- no --> M[prompt: 2024 or 2025]
+    L -- yes --> N{all-individual?}
+    M --> N
+    N -- yes --> O[prompt: output folder\nauto-name each file]
+    N -- no --> P[prompt: output .tif path]
+    O --> Q{--threads given?}
+    P --> Q
+    Q -- no --> R[prompt: thread count\ndefault = cpu_count]
+    Q -- yes --> S[open Zarr store once]
+    R --> S
+    S --> T[loop: slice → download → write GeoTIFF]
+    T --> U([done])
 ```
 
 ---
 
 ### `fetch_ftw_fields.py`
 
-Fetches FTW field predictions for a given AOI from the remote S3 Parquet store and exports them as GeoParquet files (one per year). Accepts a bounding box or a GeoJSON; when a GeoJSON is provided the results are spatially joined against its geometries.
+Fetches FTW field prediction vectors for a given AOI from the remote S3 Parquet store and exports GeoParquet files (one per year).
+
+Run with no flags for a fully interactive wizard, or pass any/all flags to skip the corresponding prompts:
+
+| Flag | Interactive fallback |
+|------|---------------------|
+| `--geojson <file>` / `--bbox "x0,y0,x1,y1"` | Asked first: choose source type, then path or coords |
+| *(GeoJSON with >1 feature)* | Geometry picker: single index / `all-combined` / `all-individual` |
+| `--years 2024\|2025\|both` | Prompted — only 2024 and 2025 are available |
+| `--output-dir <dir>` | Suggested default from input stem |
 
 ```bash
+# Fully interactive
+uv run scripts/kuva/fetch_ftw_fields.py
+
+# Pre-fill some flags; rest are prompted
+uv run scripts/kuva/fetch_ftw_fields.py --geojson parcels.geojson
+
+# Fully non-interactive
 uv run scripts/kuva/fetch_ftw_fields.py \
-    --geojson parcels.geojson \
-    --output-dir ./output \
-    --name my_fields
+    --geojson parcels.geojson --years both --output-dir ./output --name my_fields
+```
+
+```mermaid
+flowchart TD
+    A([start]) --> B{--geojson\nor --bbox\ngiven?}
+    B -- no --> C[prompt: geojson or bbox?]
+    C -- geojson --> D[prompt: file path]
+    C -- bbox --> E[prompt: xmin,ymin,xmax,ymax]
+    B -- yes --> F{GeoJSON?}
+    D --> F
+    E --> G[use bbox directly]
+    F -- yes --> H[read & reproject GeoJSON]
+    H --> I{n features > 1?}
+    I -- yes --> J[prompt: single idx /\nall-combined /\nall-individual]
+    I -- no --> K[use single geometry]
+    J --> K
+    G --> L{--years given?}
+    K --> L
+    L -- no --> M[prompt: 2024 / 2025 / both]
+    L -- yes --> N{--output-dir given?}
+    M --> N
+    N -- no --> O[prompt: output directory]
+    N -- yes --> P[setup DuckDB + S3]
+    O --> P
+    P --> Q[loop per geometry]
+    Q --> R[bbox query → S3 Parquet]
+    R --> S{GeoJSON\nfilter?}
+    S -- yes --> T[spatial intersect / clip]
+    S -- no --> U[keep all]
+    T --> V[filter by selected years]
+    U --> V
+    V --> W[write .parquet per year]
+    W --> X{more\ngeometries?}
+    X -- yes --> Q
+    X -- no --> Y([done])
 ```
 
 ---
